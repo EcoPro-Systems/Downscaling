@@ -80,10 +80,14 @@ Stand_SD=cbind(Obs[,1:2],Stand_SD)
 
 # Write the results to CSV files
 fwrite(Stand_SD[,-(c(1:T_o)+2)],paste0(path,"Stand_Downscaled.csv"))
-fwrite(Stand_SD,paste0(path,"Stand_Downscaled_training.csv"))
 
 
 if(BGL=="on"){
+  print("BGL starts!")
+  cat("\n")
+  
+  # Save the standard downscaled file for training period for use later in MATLAB BGL code
+  fwrite(Stand_SD,paste0(path,"Stand_Downscaled_training.csv"))
   
   # Initialize matrices to store results
   Mu1=matrix(NA, nrow = N, ncol = T_all)
