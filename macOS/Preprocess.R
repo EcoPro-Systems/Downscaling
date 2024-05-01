@@ -3,11 +3,11 @@
 # Extract command line arguments
 args=commandArgs(trailingOnly = TRUE)
 
-path=args[1]#"/Applications/MATLAB/MATLAB_Runtime/v99" #Where you matlab runtime is installed
-file=args[2]#getwd()#Path to your working directory
-Freq=eval(parse(text = args[3]))
-obs_year=eval(parse(text = args[4]))
-downscale_year=eval(parse(text = args[5]))
+path=args[1]#Path to your directory
+file=args[2]#getwd()#file name
+Freq=eval(parse(text = args[3])) #Frequency of your data. If it is monthly frequency is 12. If it is daily, it is 365.
+obs_year=eval(parse(text = args[4])) #Stat year of the observational period
+downscale_year=eval(parse(text = args[5])) #Till the your you plan to perform downscaling
 
 # Check if the package is installed; if not, install it
 # Define the package name you want to load
