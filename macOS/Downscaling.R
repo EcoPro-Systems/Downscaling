@@ -77,7 +77,8 @@ T_all=ncol(Model[,-c(1:2)])
 source(paste0(path,"/Stand_downscaling.R"))
 Stand_SD=Stand_downscaling(Obs,Model,Freq)
 Stand_SD=cbind(Obs[,1:2],Stand_SD)
-
+Colnames=paste0(as.numeric(colnames(Model[,-c(1:2)]))+rep(1:Freq,times=ncol(Model[,-c(1:2)])/Freq)/100)
+colnames(Stand_SD)=c("lon","lat",Colnames)
 # Write the results to CSV files
 fwrite(Stand_SD[,-(c(1:T_o)+2)],paste0(path,"Stand_Downscaled.csv"))
 

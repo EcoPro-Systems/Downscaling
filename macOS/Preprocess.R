@@ -59,7 +59,7 @@ for(i in 1:dim(tos)[3]){
 }
 
 Model_data=na.omit(Model_data)
-colnames(Model_data)=c("lon","lat",years[which(years>obs_year & downscale_year>=years)])
+colnames(Model_data)=c("lon","lat",years[which(years>=obs_year & downscale_year>=years)])
 
 print("Dimenstions of the Model_data.csv file:")
 dim(Model_data)
