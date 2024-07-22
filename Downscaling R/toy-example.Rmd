@@ -1,0 +1,209 @@
+---
+title: "BGL R implementation"
+author: "Hancheng Li"
+output: html_document
+---
+
+
+```{r,echo=F}
+suppressPackageStartupMessages({
+library(data.table)
+})
+path="/Users/lihancheng/Desktop/Downscaling Projec/Matlab2R/"
+```
+
+
+```{r}
+Obs_train=as.matrix(data.table::fread(paste0(path,"/Obs_data.csv")))
+str(Obs_train)
+testing=12 #Number of time points for validation. (If data is monthly, this is number of months for validation.)
+Obs_test=Obs_train[,(ncol(Obs_train) - (testing-1)):ncol(Obs_train)]
+fwrite(cbind(Obs_train[,1:2],Obs_test),paste0(path,"Obs_test.csv")) #This partitioning of the data into training and testing sets was carried out for illustrative purposes.
+Obs_train=Obs_train[,-c((ncol(Obs_train) - (testing-1)):ncol(Obs_train))]
+fwrite(Obs_train,paste0(path,"Obs_data.csv"))#Careful!! This is overwriting the original Obs_data.csv file. 
+
+```
+
+```{r}
+Model=as.matrix(data.table::fread(paste0(path,"/Model_data.csv")))
+str(Model)
+```
+
+
+```{r}
+
+#path_matlabRuntime="/Applications/MATLAB/MATLAB_Runtime/R2024a/" #Where you matlab runtime is installed
+path="/Users/lihancheng/Desktop/Downscaling Projec/Matlab2R/"#Path to your working directory
+freq=12 #Frequency of your data. Whether it is monthly, daily etc.
+BGL="on"#If you want to turn off the BGL downscaling, set BGL="off" otherwise set BGL="on"
+```
+
+
+
+```{r,eval=T}
+source(paste0(path,"/Downscaling.R"))
+start_time <- Sys.time()
+Downscaling(path,freq,BGL)
+end_time <- Sys.time()
+elapsed_time <- end_time - start_time
+cat("Elapsed time:", elapsed_time, "\n")
+```
+
+
+Comparison
+===
+- Here, I assess the accuracy of downscaled projections, comparing the root mean square error (RMSE) between standard and BGL downscaling.
+- Model used here is GFDL-ESM4 model under SSP585 scenario.
+- Study region changed is entire Kelp region
+
+```{r, message = FALSE, warning = FALSE,echo = FALSE}
+suppressPackageStartupMessages({
+#library(rgdal)
+library(raster)
+library(ggplot2)
+library(fields)
+library(ncdf4)
+library(data.table)
+library(sf)
+library(terra)
+})
+```
+
+
+```{r,echo = FALSE}
+
+BGL=as.matrix(data.table::fread(paste0(path,"/BGL_Downscaled.csv")))
+Stand=as.matrix(data.table::fread(paste0(path,"/Stand_Downscaled.csv")))
+Obs=as.matrix(data.table::fread(paste0(path,"/Obs_test.csv")))
+Model_val=Model[which(Model[,1]>min(Obs[,1]) & Model[,1]<max(Obs[,1]) & Model[,2]>min(Obs[,2]) & Model[,2]<max(Obs[,2])),(ncol(Obs_train) - (testing-1)):ncol(Obs_train)]
+
+```
+```{r,echo = FALSE}
+#RMSE averaged across the region
+RMSE.BGL=rep(NA,ncol(Obs[,-c(1:2)]))
+RMSE.Stand=rep(NA,ncol(Obs[,-c(1:2)]))
+RMSE.Model=rep(NA,ncol(Obs[,-c(1:2)]))
+
+
+#RMSE averaged over months
+RMSE.loc.BGL=matrix(NA,nrow=nrow(Obs[,-c(1:2)]),ncol=ncol(Obs[,-c(1:2)]))
+RMSE.loc.Stand=matrix(NA,nrow=nrow(Obs[,-c(1:2)]),ncol=ncol(Obs[,-c(1:2)]))
+
+for(i in 1:ncol(Obs[,-c(1:2)])){
+  RMSE.BGL[i]= sqrt(mean(na.omit((Obs[,i+2]-BGL[,i+2])^2)))
+  RMSE.Stand[i]= sqrt(mean(na.omit((Obs[,i+2]-Stand[,i+2])^2)))
+  RMSE.Model[i]= sqrt(mean(na.omit((Obs[,i+2]-Model_val[i])^2)))
+  
+  RMSE.loc.BGL[,i]=sqrt((Obs[,i+2]-BGL[,i+2])^2)
+  RMSE.loc.Stand[,i]=sqrt((Obs[,i+2]-Stand[,i+2])^2)
+  
+}
+
+
+
+plot(1:length(RMSE.BGL),RMSE.BGL, type = "l", col = "red", main = "RMSE over months", xlab = "Months", ylab = "RMSE", ylim = c(min(c(RMSE.BGL, RMSE.Stand,RMSE.Model)), max(c(RMSE.BGL, RMSE.Stand,RMSE.Model))), xaxt = "n")
+
+# Overlaying RMSE.Stand with a blue line
+lines(1:length(RMSE.BGL),RMSE.Stand,col = "blue")
+lines(1:length(RMSE.BGL),RMSE.Model,col="black")
+# Adding x-axis labels
+axis(1, at = seq_along(RMSE.Model), labels = c(1:length(RMSE.BGL)))
+legend("topright", legend = c("BGL", "Stand", "Model"), col = c("red", "blue", "black"), lty = 1)
+
+
+
+# Big cluster
+lon.A.1 <- min(Obs[,1])
+lat.A.1 <- min(Obs[,2])
+lon.A.2 <- max(Obs[,1])
+lat.A.2 <- max(Obs[,2])
+
+# Coastline .shp
+#coastlines <- readOGR(paste0(path, "ne-coastlines-10m/ne_10m_coastline.shp"))
+coastlines <- read_sf(paste0(path, "ne-coastlines-10m/ne_10m_coastline.shp"))
+#coastlines <- st_read(paste0(path, "ne-coastlines-10m/ne_10m_coastline.shp"))
+crop_area.A <- extent(lon.A.1, lon.A.2, lat.A.1, lat.A.2)
+#crop_area.A <- ext(lon.A.1, lon.A.2, lat.A.1, lat.A.2)
+coastlines_A <- st_crop(x = coastlines, y = crop_area.A)
+
+
+#coastlines_sf <- st_read(paste0(path, "ne-coastlines-10m/ne_10m_coastline.shp"))
+#crop_area.A <- ext(lon.A.1, lon.A.2, lat.A.1, lat.A.2)
+#coastlines_vect <- vect(coastlines_sf)
+#coastlines_A <- crop(coastlines_vect, crop_area.A)
+
+
+
+Res.col=colorRampPalette(c("darkblue","yellow","red"))
+RMSE.col=Res.col(1000)
+
+min.RMSE=min(c(rowMeans(RMSE.loc.Stand),rowMeans(RMSE.loc.BGL)))
+max.RMSE=max(c(rowMeans(RMSE.loc.Stand),rowMeans(RMSE.loc.BGL)))
+
+RMSE.loc.Stand.map=as.data.frame(cbind(Obs[,1:2],rowMeans(RMSE.loc.Stand)))
+RMSE.loc.Stand.map[which(RMSE.loc.Stand.map[,3]>=max.RMSE),3]=max.RMSE
+RMSE.loc.Stand.map[which(RMSE.loc.Stand.map[,3]<=min.RMSE),3]=min.RMSE
+names(RMSE.loc.Stand.map)=c("lon","lat","RMSE")
+
+p1=ggplot() +
+  #geom_path(data = coastlines_A, color = "black", inherit.aes = FALSE, aes(x = long, y = lat, group = group)) +
+  geom_sf(data = coastlines_A, color = "black") +
+  geom_point(data = RMSE.loc.Stand.map, aes(x = lon, y = lat, fill = RMSE, color = RMSE), show.legend = F, shape = 16,size = 0.5) +
+  scale_fill_gradientn(limits = c(min.RMSE,max.RMSE), colours = RMSE.col) +
+  scale_color_gradientn(limits = c(min.RMSE,max.RMSE), colours = RMSE.col) +
+  labs(title = "RMSE - Stand") +
+  theme(text = element_text(size = 8)) +
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(hjust = 0.5))
+
+
+RMSE.loc.BGL.map=as.data.frame(cbind(Obs[,1:2],rowMeans(RMSE.loc.BGL)))
+RMSE.loc.BGL.map[which(RMSE.loc.BGL.map[,3]>=max.RMSE),3]=max.RMSE
+RMSE.loc.BGL.map[which(RMSE.loc.BGL.map[,3]<=min.RMSE),3]=min.RMSE
+names(RMSE.loc.BGL.map)=c("lon","lat","RMSE")
+
+p2=ggplot() +
+  #geom_path(data = coastlines_A, color = "black", inherit.aes = FALSE, aes(x = long, y = lat, group = group)) +
+  geom_sf(data = coastlines_A, color = "black") +
+  geom_point(data = RMSE.loc.BGL.map, aes(x = lon, y = lat, fill = RMSE, color = RMSE), show.legend = F, shape = 16,size = 0.5) +
+  scale_fill_gradientn(limits = c(min.RMSE,max.RMSE), colours = RMSE.col) +
+  scale_color_gradientn(limits = c(min.RMSE,max.RMSE), colours = RMSE.col) +
+  labs(title = "RMSE - BGL") +
+  theme(text = element_text(size = 8)) +
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(hjust = 0.5))
+
+
+p2_legend <- ggplot() +
+  #geom_path(data = coastlines_A, color = "black", inherit.aes = T, aes(x = long, y = lat, group = group)) +
+  geom_sf(data = coastlines_A, color = "black") +
+  geom_point(data = RMSE.loc.BGL.map, aes(x = lon, y = lat, fill = RMSE, color = RMSE), show.legend = T, shape = 16,size = 0.5) +
+  scale_fill_gradientn(limits = c(min.RMSE,max.RMSE), colours = RMSE.col) +
+  scale_color_gradientn(limits = c(min.RMSE,max.RMSE), colours = RMSE.col) +
+  labs(title = "RMSE - BGL") +
+  theme(text = element_text(size = 8)) +
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(hjust = 0.5))+
+  theme(legend.position="bottom",legend.key.height = unit(0.5, "cm"),legend.key.width = unit(2.5, "cm"),legend.title =element_blank(),text = element_text(size = 15))
+
+legend=cowplot::get_legend(p2_legend)
+
+library(gridExtra)
+
+# Define the layout for three rows
+layout <- rbind(c(1, 2), c(3, 3))  # First row for p1 and p2, second row for p3 and p4, third row for the legend
+
+# Define heights for the rows
+row_heights <- c(2,0.5)  # Set the height of the first and second rows to 1, and the third row to 0.5
+
+```
+
+```{r echo = FALSE, fig.cap = "RMSE values calculated across months from standard downscaling  (left) and from BGL downscaling (right) at fine-sclae pixels"}
+# Arrange the plots using grid.arrange with the specified layout and heights
+
+grid.arrange(p1, p2,legend, ncol = 2, layout_matrix = layout, heights = row_heights)
+
+```
+Root Mean Square Error (RMSE) calculated across the fine-scale locations and  avaeraged over 24 validation moths from 2018 to 2019
+```{r,echo=FALSE}
+print(paste0("BGL: ",mean(RMSE.BGL)))
+print(paste0("Standard: ",mean(RMSE.Stand)))
+
+```
