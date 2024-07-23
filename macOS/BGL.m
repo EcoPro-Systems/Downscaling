@@ -1,6 +1,6 @@
 function BGL(path)
   % Import data from .csv files
-  
+
   % Load observational data from Obs_data.csv
   Obs = table2array(readtable(strcat(path,'Obs_data.csv')));
   Obs_pixels = Obs(:, 1:2);
@@ -8,9 +8,8 @@ function BGL(path)
 
   % Load stand downscaled training data from Stand_Downscaled_training.csv
   Stand_SD = table2array(readtable(strcat(path, 'Stand_Downscaled_training.csv')));
-  column_names=Stand_SD(1,:);
   Stand_SD(:, 1:2) = [];
-  Stand_SD(1, :) = [];
+
   % Calculate dimensions
   N = size(Obs, 1);
   T_o = size(Obs, 2);
@@ -27,7 +26,7 @@ function BGL(path)
   Stand_SD(:, 1:T_o) = [];
   Mu1(:, 1:T_o) = [];
   Mu2(:, 1:T_o) = [];
-  
+
   % Calculate Z1 downscale and Z2 mean downscale
   Z1_downscale = Stand_SD - Mu1;
   Z2_mean_downscale = Mu2;
@@ -144,9 +143,10 @@ function BGL(path)
     SY = smallPhi' * Z1_new;
     Predicted_temp = Mean_new(:, 1) + (SC * Inv * SY) / nuggetestimates(1);
 
+    Predicted_sd=NaN([N, 1]);
     Matrix = (Sigma + C * Inv * C');
     for loc = 1:n
-      Predicted_sd = sqrt(smallPhi(loc, :) * Matrix * smallPhi(loc, :)' + nuggetestimates(2));
+      Predicted_sd(loc, :) = sqrt(smallPhi(loc, :) * Matrix * smallPhi(loc, :)' + nuggetestimates(2));
     end
 
     Predicted_temp_all(:, month + 2) = Predicted_temp;
@@ -158,13 +158,9 @@ function BGL(path)
   toc
   fprintf('\n')
 
-  column_names(:,[1:2,(1:T_o)+2])=[];
-  column_names=["lon","lat",column_names];
-  Predicted_temp_all=array2table(Predicted_temp_all, 'VariableNames', column_names);
-  Predicted_sd_all=array2table(Predicted_sd_all, 'VariableNames', column_names);
-  
-  writetable(Predicted_temp_all, strcat(path, '/BGL_Downscaled.csv'));
-  writetable(Predicted_sd_all, strcat(path, '/BGL_Downscaled_UQ.csv'));
+  % Save the results to CSV files
+  csvwrite(strcat(path, '/BGL_Downscaled.csv'), Predicted_temp_all);
+  csvwrite(strcat(path, '/BGL_Downscaled_UQ.csv'), Predicted_sd_all);
 
   % Delete unnecessary CSV files
   delete(strcat(path, '/Stand_Downscaled_training.csv'));
